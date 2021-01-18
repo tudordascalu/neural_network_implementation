@@ -26,8 +26,8 @@ if not has_arguments or "1" in arguments:
     """
     Train neural network and save model to file
     """
-    nn = neural_net.Neural_net(n_dim=1, n_neurons=3)
-    nn.fit(X_train, y_train, n_iter=2)
+    nn = neural_net.Neural_net(n_dim=1, n_neurons=3, learning_rate=1e-5)
+    nn.fit(X_train, y_train, n_iter=500)
 
 if "2" in arguments:
     pass
