@@ -5,7 +5,7 @@ class Neural_net():
     """
     Neural network model with one hidden layer
     """
-    def __init__(self, n_dim, n_neurons, learning_rate=1e-3):
+    def __init__(self, n_dim, n_neurons, learning_rate=1e-5):
         """
         Arguments:
             n_dim: number of dimensions of input
@@ -13,19 +13,18 @@ class Neural_net():
         """
         self.network = [
             {
-                "layer": "hidden",
-                "weights": np.random.random((n_neurons, n_dim + 1)),
-                "activation": self.f_sigmoid,
-                "dactivation_dx": self.df_sigmoid_dx,
-                "gradient": None,
-                "z": None,
-                "a": None
+                "type": "hidden",
+                "weights": np.random.random((n_neurons, n_dim + 1)), # Set of weights corresponding to all neurons
+                "n_neurons": n_neurons,
+                "delta": None, # Derivative of error with respect to the activation a for each neuron
+                "z": None,  # Linear response = w0 + w1a1 + w2a2
+                "a": None # Activation response = sigmoid(z)
             },
             {
-                "layer": "output",
-                "weights": np.random.random((1, n_neurons + 1)),
-                "activation": None,
-                "gradient": None,
+                "type": "output",
+                "weights": np.random.random((1, n_neurons + 1)), # Set of weights correspondnig to all neurons
+                "n_neurons": n_neurons,
+                "delta": None, # Derivative of error with respect to the activation a for each neuron
                 "z": None, # Linear response = w0 + w1a1 + w2a2
                 "a": None, # Activation response = sigmoid(z)
             }
@@ -90,15 +89,17 @@ class Neural_net():
         Returns:
             predictions on bactch
         """
+        self.network[0]["input"] = X.T
         layer_input = X.T # First layer input
-        for i, layer in enumerate(self.network):
-            z = layer["weights"] @ layer_input # Compute linear activation
+        for i_layer, layer in enumerate(self.network):
+            z = layer["weights"] @ layer["input"] # Compute linear activation
             a = z
-            if layer["activation"] != None:
-                a = layer["activation"](z)
-            self.network[i]["z"] = z
-            self.network[i]["a"] = a
-            layer_input = self.compute_padding(a.T).T # Compute input for next layer
+            if layer["type"] == "hidden":
+                a = self.f_sigmoid(z)
+            self.network[i_layer]["z"] = z
+            self.network[i_layer]["a"] = a
+            if layer["type"] != "output":
+                self.network[i_layer + 1]["input"] = self.compute_padding(a.T).T # Compute input for next layer
         return a.reshape(-1, 1) # Predictions
 
     def compute_backpropagation(self, X, y):
@@ -109,33 +110,21 @@ class Neural_net():
             gradient w.r.t weights
         """
         for i_layer in range(self.n_layers)[::-1]: # Iterate through network sarting at the end layer
-            layer = self.network[i_layer]
-            n_neurons = layer["weights"].shape[0]
             self.network[i_layer]["delta"] = []
-            if i_layer == self.n_layers - 1: # Output error
-                for i_neuron in range(n_neurons):
-                    delta = 2 * (layer["a"].reshape(-1, 1) - y)
-                    self.network[i_layer]["delta"].append(delta) # Compute error to be propagated backwards for each neuron
+            if self.network[i_layer]["type"] == "output":
+                delta = np.sum(2 * (self.network[i_layer]["a"].reshape(-1, 1) - y))
+                self.network[i_layer]["delta"].append(delta)
             else:
-                for i_neuron in range(n_neurons):
-                    next_layer = self.network[i_layer + 1]
-                    delta = np.sum(next_layer["delta"] * self.network[i_layer + 1]["weights"][i_neuron, :]) * self.df_sigmoid_dx(layer["z"][i_neuron])
+                for i_neuron in range(self.network[i_layer]["n_neurons"]):
+                    delta = np.sum(self.network[i_layer + 1]["delta"] * self.network[i_layer + 1]["weights"][:, i_neuron] * self.df_sigmoid_dx(self.network[i_layer]["z"][i_neuron]))
                     self.network[i_layer]["delta"].append(delta)
                     
-            # else:
-                # error = 
-
-            # for i_neuron, w_neuron in enumerate(layer["weights"]):
-                
-            #     grad = 2 * (y - y_pred) * self.network[i_layer + 1]
-            # gard = 2 * (y - y_pred)
-            # if layer["layer"] == output:
-            #     grad *= 
-            # df_mse = self.df_mse(y, y_pred) * 
-            # df_e_da = 
+        for i_layer in range(self.n_layers - 1): # Update weights
+            for i_neuron in range(self.network[i_layer]["n_neurons"]):
+                self.network[i_layer]["weights"][i_neuron] -= np.sum(self.learning_rate * self.network[i_layer]["delta"][i_neuron] * self.network[i_layer]["input"], axis=1)
 
 
-    def fit(self, X, y, n_iter=500, threshold=1e-3, batch_size=10):
+    def fit(self, X, y, n_iter=500, threshold=1e-3, batch_size=5):
         """
         Arguments:
             X: input; shape(n, n_dim)
@@ -151,9 +140,7 @@ class Neural_net():
                 y_pred = self.compute_forwardpropagation(X_batch) # Forward pass
                 loss = self.f_mse(y_batches[i_batch], y_pred) # Compute loss
                 self.compute_backpropagation(X, y_batches[i_batch])
-                # Computation of gradients
-                # Check if gradient magnitude is smaller than threshold
-                # Update weights
+                print(loss)
 
     def compute_padding(self, X):
         """
