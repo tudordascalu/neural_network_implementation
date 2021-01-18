@@ -60,16 +60,6 @@ class Neural_net():
         """
         return np.sum((y_pred - y)**2)
 
-    def df_mse(self, y, y_pred):
-        """
-        Arguments:
-            y: predicted labels
-            y_pred: true labels
-        Returns:
-            derivative w.r.t (y_pred - y)
-        """
-        return 2 * (y_pred - y)
-
     def compute_batches(self, X, y, batch_size):
         """
         Arguments:
@@ -109,10 +99,10 @@ class Neural_net():
         Returns:
             gradient w.r.t weights
         """
-        for i_layer in range(self.n_layers)[::-1]: # Iterate through network sarting at the end layer
+        for i_layer in range(self.n_layers)[::-1]: # Propagate error through network
             self.network[i_layer]["delta"] = []
             if self.network[i_layer]["type"] == "output":
-                delta = np.sum(2 * (self.network[i_layer]["a"].reshape(-1, 1) - y))
+                delta = np.sum(self.network[i_layer]["a"].reshape(-1, 1) - y) # Derivtive of MSE w.r.t (y_pred - y)
                 self.network[i_layer]["delta"].append(delta)
             else:
                 for i_neuron in range(self.network[i_layer]["n_neurons"]):
@@ -140,7 +130,14 @@ class Neural_net():
                 y_pred = self.compute_forwardpropagation(X_batch) # Forward pass
                 loss = self.f_mse(y_batches[i_batch], y_pred) # Compute loss
                 self.compute_backpropagation(X, y_batches[i_batch])
-                print(loss)
+
+    def predict(self, X):
+        """
+        Arguments:
+            X: input
+        Returns:
+            
+        """
 
     def compute_padding(self, X):
         """
