@@ -1,3 +1,7 @@
+"""
+Neural network
+    - handles 1 input layer with alternative sigmoid activation function
+"""
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -17,6 +21,7 @@ class Neural_net():
                 "weights": np.random.random((n_neurons, n_dim + 1)), # Set of weights corresponding to all neurons
                 "n_neurons": n_neurons,
                 "delta": None, # Derivative of error with respect to the activation a for each neuron
+                "partial_derivatives": [],
                 "z": None,  # Linear response = w0 + w1a1 + w2a2
                 "a": None # Activation response = sigmoid(z)
             },
@@ -25,6 +30,7 @@ class Neural_net():
                 "weights": np.random.random((1, n_neurons + 1)), # Set of weights correspondnig to all neurons
                 "n_neurons": n_neurons,
                 "delta": None, # Derivative of error with respect to the activation a for each neuron
+                "partial_derivatives": [],
                 "z": None, # Linear response = w0 + w1a1 + w2a2
                 "a": None, # Activation response = sigmoid(z)
             }
@@ -100,6 +106,7 @@ class Neural_net():
             gradient w.r.t weights
         """
         for i_layer in range(self.n_layers)[::-1]: # Propagate error through network
+            self.network[i_layer]["partial_derivatives"] = []
             self.network[i_layer]["delta"] = []
             if self.network[i_layer]["type"] == "output":
                 delta = np.sum(self.network[i_layer]["a"].reshape(-1, 1) - y) # Derivtive of MSE w.r.t (y_pred - y)
@@ -111,34 +118,66 @@ class Neural_net():
                     
         for i_layer in range(self.n_layers - 1): # Update weights
             for i_neuron in range(self.network[i_layer]["n_neurons"]):
-                self.network[i_layer]["weights"][i_neuron] -= np.sum(self.learning_rate * self.network[i_layer]["delta"][i_neuron] * self.network[i_layer]["input"], axis=1)
+                partial_derivatives = np.sum(self.network[i_layer]["delta"][i_neuron] * self.network[i_layer]["input"], axis=1)
+                self.network[i_layer]["weights"][i_neuron] -= self.learning_rate * partial_derivatives
+                self.network[i_layer]["partial_derivatives"].append(partial_derivatives)
 
 
-    def fit(self, X, y, n_iter=500, threshold=1e-3, batch_size=5):
+    def fit(self, X, y, n_iter=500, threshold_gradient=1e-10, threshold_bad=10, batch_size=5, X_val=[], y_val=[], verbose=False):
         """
         Arguments:
             X: input; shape(n, n_dim)
             y: labels; shape=(n, 1)
             n_iter: maximum number of iterations before stopping
             threshold: minimum gradient magnitude threshold
+            X_val: validation input; used in case log is true
+            y_val: validation labels; used in case log is true
         Returns:
             updates the weights of each layer
         """
-        X_batches, y_batches = self.compute_batches(X, y, batch_size) # Split data set 
+        X_batches, y_batches = self.compute_batches(X, y, batch_size) # Split data set
+        count_bad = 0
+        error_val_past = np.inf
         for i_iter in range(n_iter): # Loop through iterations
             for i_batch, X_batch in enumerate(X_batches): # Loop through batches
-                y_pred = self.compute_forwardpropagation(X_batch) # Forward pass
-                loss = self.f_mse(y_batches[i_batch], y_pred) # Compute loss
+                # Forward pass
+                y_pred = self.compute_forwardpropagation(X_batch) 
+                # Compute loss
+                error_train = self.f_mse(y_batches[i_batch], y_pred)
+                # Backpropagate errors
                 self.compute_backpropagation(X, y_batches[i_batch])
-
+                # Compute gradient magnitude
+                partial_derivatives = [partial_derivative for layer in self.network for partial_derivative in layer["partial_derivatives"]]
+                gradient_magnitude = np.sum(np.power(partial_derivatives, 2))
+                # Validate model
+                error_val = self.f_mse(self.predict(X_val), y_val)
+                # Log data
+                if verbose == True:
+                    print("Iteration: {}".format(i_iter))
+                    print("Gradient magnitude: {}".format(gradient_magnitude))
+                    print("Train error: {}".format(error_train))
+                    print("Validation error: {}".format(error_val))
+                # Early stopping
+                if error_val_past < error_val: 
+                    count_bad += 1
+                    if count_bad > threshold_bad: 
+                        print("More than {} iterations in a row with worse validation errors".format(count_bad))
+                        return
+                else: 
+                    count_bad = 0
+                if gradient_magnitude < threshold_gradient: 
+                    print("Gradient magnitude {} is below threshold {}".format(gradient_magnitude, threshold_gradient))
+                    return
+                error_val_past = error_val
     def predict(self, X):
         """
         Arguments:
             X: input
         Returns:
-            
+            y_pred
         """
-
+        return self.compute_forwardpropagation(X)
+    
     def compute_padding(self, X):
         """
         Arguments:
