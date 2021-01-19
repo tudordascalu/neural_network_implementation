@@ -41,11 +41,29 @@ class Neural_net():
     def f_sigmoid(self, X): # TODO: rename to appropriate funtion name
         """
         Arguments:
-            X: list of neuron outputs
+            X: input
         Returns
             f(X) = \frac{X}{1 + |X|}
         """
         return X / (1 + np.abs(X))
+
+    def f_relu(self, X):
+        """
+        Arguments:
+            X: input
+        Returns:
+            max(0, X)
+        """
+        return np.where(X >= 0, X, 0)
+    
+    def df_relu_dx(self, X):
+        """
+        Arguments:
+            X: input
+        Returns:
+            max(0, 1)
+        """
+        return np.where(X >= 0, 1, 0)
 
     def df_sigmoid_dx(self, X):
         """
@@ -75,6 +93,10 @@ class Neural_net():
         Returns:
             X_batches
         """
+        i_shuffle = np.arange(0, X.shape[0])
+        np.random.shuffle(i_shuffle)
+        X = X[i_shuffle, :]
+        y = y[i_shuffle, :]
         n_batches = int(X.shape[0] / batch_size)
         return np.array_split(X, n_batches, axis=0), np.array_split(y, n_batches, axis=0)
 
@@ -109,41 +131,44 @@ class Neural_net():
             self.network[i_layer]["partial_derivatives"] = []
             self.network[i_layer]["delta"] = []
             if self.network[i_layer]["type"] == "output":
-                delta = np.sum(self.network[i_layer]["a"].reshape(-1, 1) - y) # Derivtive of MSE w.r.t (y_pred - y)
+                delta = self.network[i_layer]["a"].reshape(-1, 1) - y # Derivtive of MSE w.r.t (y_pred - y) for each training example
                 self.network[i_layer]["delta"].append(delta)
             else:
                 for i_neuron in range(self.network[i_layer]["n_neurons"]):
-                    delta = np.sum(self.network[i_layer + 1]["delta"] * self.network[i_layer + 1]["weights"][:, i_neuron] * self.df_sigmoid_dx(self.network[i_layer]["z"][i_neuron]))
+                    delta = self.network[i_layer + 1]["delta"][0] * self.network[i_layer + 1]["weights"][:, i_neuron] * self.df_sigmoid_dx(self.network[i_layer]["z"][i_neuron].reshape(-1, 1))
                     self.network[i_layer]["delta"].append(delta)
                     
         for i_layer in range(self.n_layers - 1): # Update weights
             for i_neuron in range(self.network[i_layer]["n_neurons"]):
-                partial_derivatives = np.sum(self.network[i_layer]["delta"][i_neuron] * self.network[i_layer]["input"], axis=1)
+                partial_derivatives = np.sum(self.network[i_layer]["delta"][i_neuron] * self.network[i_layer]["input"].T, axis=0)
                 self.network[i_layer]["weights"][i_neuron] -= self.learning_rate * partial_derivatives
                 self.network[i_layer]["partial_derivatives"].append(partial_derivatives)
 
 
-    def fit(self, X, y, n_iter=500, threshold_gradient=1e-10, threshold_bad=10, batch_size=5, X_val=[], y_val=[], verbose=False):
+    def fit(self, X, y, n_epochs=500, threshold_gradient=1e-10, threshold_bad=10, batch_size=5, X_val=[], y_val=[], verbose=False):
         """
         Arguments:
             X: input; shape(n, n_dim)
             y: labels; shape=(n, 1)
-            n_iter: maximum number of iterations before stopping
+            n_epochs: maximum number of iterations before stopping
             threshold: minimum gradient magnitude threshold
             X_val: validation input; used in case log is true
             y_val: validation labels; used in case log is true
         Returns:
             updates the weights of each layer
         """
-        X_batches, y_batches = self.compute_batches(X, y, batch_size) # Split data set
+        error_val_list = []
+        error_train_list = []
         count_bad = 0
         error_val_past = np.inf
-        for i_iter in range(n_iter): # Loop through iterations
-            for i_batch, X_batch in enumerate(X_batches): # Loop through batches
+        for i_epoch in range(n_epochs): # Loop through epochs
+            X_batches, y_batches = self.compute_batches(X, y, batch_size) # Split data set
+            for i_batch, X_batch in enumerate(X_batches): # Iterate through all batches
                 # Forward pass
                 y_pred = self.compute_forwardpropagation(X_batch) 
                 # Compute loss
                 error_train = self.f_mse(y_batches[i_batch], y_pred)
+                error_train_list.append(error_train)
                 # Backpropagate errors
                 self.compute_backpropagation(X, y_batches[i_batch])
                 # Compute gradient magnitude
@@ -151,9 +176,11 @@ class Neural_net():
                 gradient_magnitude = np.sum(np.power(partial_derivatives, 2))
                 # Validate model
                 error_val = self.f_mse(self.predict(X_val), y_val)
+                error_val_list.append(error_val)
                 # Log data
                 if verbose == True:
-                    print("Iteration: {}".format(i_iter))
+                    print("----")
+                    print("Iteration: {}".format(i_epoch))
                     print("Gradient magnitude: {}".format(gradient_magnitude))
                     print("Train error: {}".format(error_train))
                     print("Validation error: {}".format(error_val))
@@ -162,13 +189,15 @@ class Neural_net():
                     count_bad += 1
                     if count_bad > threshold_bad: 
                         print("More than {} iterations in a row with worse validation errors".format(count_bad))
-                        return
+                        return error_train_list, error_val_list
                 else: 
                     count_bad = 0
                 if gradient_magnitude < threshold_gradient: 
                     print("Gradient magnitude {} is below threshold {}".format(gradient_magnitude, threshold_gradient))
-                    return
+                    return error_train_list, error_val_list
                 error_val_past = error_val
+        return error_train_list, error_val_list
+
     def predict(self, X):
         """
         Arguments:
