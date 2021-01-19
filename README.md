@@ -1,5 +1,5 @@
 # Project description
-- self implementation of a single layer neural network with varying number of neurons
+- self implementation of a single hidden layer neural network with varying number of neurons
 - the hidden layer uses alternative sigmoid as activation function
 - the output layer includes one neuron
 - the loss function is MSE
